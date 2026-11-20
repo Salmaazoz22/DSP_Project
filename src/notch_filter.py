@@ -97,3 +97,67 @@ def plot_response(b, a, fs, n_points=4096):
 
     fig.tight_layout()
     return fig
+
+
+def _plot_roots(ax, zeros, poles, size):
+    ax.plot(zeros.real, zeros.imag, "o", markerfacecolor="none", markersize=size, label="zeros")
+    ax.plot(poles.real, poles.imag, "x", markersize=size, markeredgewidth=1.8, label="poles")
+
+
+def plot_pole_zero(b, a):
+    """Pole-zero plot: full z-plane view + zoom on the upper-half-plane zero/pole pair. Returns a Figure."""
+    b, a = _check_coefficients(b, a)
+    zeros, poles = np.roots(b), np.roots(a)
+
+    fig = Figure(figsize=(11, 5))  # not registered with pyplot -> no plt.show / leaks
+    ax_full, ax_zoom = fig.subplots(1, 2)
+    fig.suptitle("Pole-zero plot (zeros on the unit circle, poles just inside)")
+
+    # full view
+    theta = np.linspace(0, 2 * np.pi, 721)
+    ax_full.plot(np.cos(theta), np.sin(theta), "--", linewidth=0.8, color="gray", label="unit circle")
+    _plot_roots(ax_full, zeros, poles, size=9)
+    ax_full.axhline(0, color="black", linewidth=0.6)
+    ax_full.axvline(0, color="black", linewidth=0.6)
+    ax_full.set_xlim(-1.2, 1.2)
+    ax_full.set_ylim(-1.2, 1.2)
+    ax_full.set_aspect("equal")
+    ax_full.set_xlabel("Real")
+    ax_full.set_ylabel("Imaginary")
+    ax_full.grid(True, alpha=0.4)
+    ax_full.legend(loc="lower left", fontsize="small")
+
+    # zoom on the upper-half-plane pair: at 50 Hz / 16 kHz they sit ~3e-4 apart near (1, 0)
+    z0 = zeros[np.argmax(zeros.imag)]
+    p0 = poles[np.argmax(poles.imag)]
+    center = (z0 + p0) / 2
+    half = max(3 * abs(z0 - p0), 1e-4)
+    ang = np.angle(center)
+    arc = np.linspace(ang - 2 * half, ang + 2 * half, 401)  # radius ~1 -> arc length ~ angle span
+    ax_zoom.plot(np.cos(arc), np.sin(arc), "--", linewidth=0.8, color="gray", label="unit circle")
+    _plot_roots(ax_zoom, zeros, poles, size=12)
+    ax_zoom.set_xlim(center.real - half, center.real + half)
+    ax_zoom.set_ylim(center.imag - half, center.imag + half)
+    ax_zoom.set_aspect("equal")
+    ax_zoom.ticklabel_format(useOffset=False)
+    ax_zoom.tick_params(axis="x", labelrotation=30)
+    ax_zoom.set_xlabel("Real")
+    ax_zoom.set_ylabel("Imaginary")
+    ax_zoom.set_title("Zoom: upper-half-plane zero and pole", fontsize="medium")
+    ax_zoom.grid(True, alpha=0.4)
+    ax_zoom.legend(loc="lower left", fontsize="small")
+    ax_zoom.text(
+        0.03,
+        0.97,
+        f"|zero| = {abs(z0):.4f}, angle = {np.angle(z0):.5f} rad\n"
+        f"|pole| = {abs(p0):.4f}, angle = {np.angle(p0):.5f} rad\n"
+        f"zero-pole distance = {abs(z0 - p0):.2e}",
+        transform=ax_zoom.transAxes,
+        va="top",
+        fontsize="small",
+        family="monospace",
+        bbox=dict(boxstyle="round", facecolor="white", alpha=0.85),
+    )
+
+    fig.tight_layout()
+    return fig

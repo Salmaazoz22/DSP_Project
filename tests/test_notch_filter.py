@@ -8,7 +8,7 @@ import pytest
 from matplotlib.figure import Figure
 from scipy.signal import freqz, iirnotch
 
-from src.notch_filter import apply_notch, design_notch, plot_response
+from src.notch_filter import apply_notch, design_notch, plot_pole_zero, plot_response
 
 FS_VALUES = [16000, 8000]
 F0_VALUES = [50, 60]
@@ -120,6 +120,30 @@ def test_plot_response_returns_figure_without_pyplot(fs, f0):
     assert plt.get_fignums() == before
 
 
+# ---------- plot_pole_zero ----------
+
+
+@pytest.mark.parametrize("fs, f0", CASES)
+def test_plot_pole_zero_returns_figure_without_pyplot(fs, f0):
+    before = plt.get_fignums()
+    fig = plot_pole_zero(*design_notch(f0, fs))
+    assert isinstance(fig, Figure)
+    assert len(fig.axes) == 2  # full view + zoom
+    assert plt.get_fignums() == before
+
+
+@pytest.mark.parametrize("fs, f0", CASES)
+def test_plot_pole_zero_plots_zeros_on_circle_poles_inside(fs, f0):
+    b, a = design_notch(f0, fs)
+    ax_full = plot_pole_zero(b, a).axes[0]
+    lines = {ln.get_label(): ln for ln in ax_full.lines}
+    assert {"zeros", "poles"} <= set(lines)
+    z = lines["zeros"].get_xdata() + 1j * lines["zeros"].get_ydata()
+    p = lines["poles"].get_xdata() + 1j * lines["poles"].get_ydata()
+    np.testing.assert_allclose(np.abs(z), 1.0, atol=1e-9)
+    assert np.all(np.abs(p) < 1)
+
+
 # ---------- invalid inputs ----------
 
 NAN, INF = float("nan"), float("inf")
@@ -154,21 +178,29 @@ def test_design_notch_invalid_params(f0, fs, Q):
 
 _B, _A = design_notch(50, 16000)
 
+INVALID_COEFFS = [
+    (_B[:2], _A),  # wrong coefficient shape
+    (_B, np.append(_A, 0.0)),
+    (_B.reshape(1, 3), _A),
+    (_B, _A.reshape(3, 1)),
+    (_B, [0.0, 1.0, 0.5]),  # a[0] == 0
+    (_B, [1.0, -2.5, 1.5]),  # unstable a (poles at 1 and 1.5)
+    ([np.nan, 0.0, 1.0], _A),  # NaN coefficient
+]
 
-@pytest.mark.parametrize(
-    "b, a",
-    [
-        (_B[:2], _A),  # wrong coefficient shape
-        (_B, np.append(_A, 0.0)),
-        (_B.reshape(1, 3), _A),
-        (_B, _A.reshape(3, 1)),
-        (_B, [0.0, 1.0, 0.5]),  # a[0] == 0
-        (_B, [1.0, -2.5, 1.5]),  # unstable a (poles at 1 and 1.5)
-    ],
-)
+
+@pytest.mark.parametrize("b, a", INVALID_COEFFS)
 def test_apply_notch_invalid_coefficients(b, a):
     with pytest.raises(ValueError):
         apply_notch(np.zeros(16), b, a)
+
+
+@pytest.mark.parametrize("b, a", INVALID_COEFFS)
+def test_plot_pole_zero_invalid_coefficients(b, a):
+    before = plt.get_fignums()
+    with pytest.raises(ValueError):
+        plot_pole_zero(b, a)
+    assert plt.get_fignums() == before
 
 
 @pytest.mark.parametrize(

@@ -16,7 +16,7 @@ import matplotlib.pyplot as plt
 
 from src.analysis import add_hum
 from src.metrics import snr_db
-from src.notch_filter import apply_notch, design_notch, plot_response
+from src.notch_filter import apply_notch, design_notch, plot_pole_zero, plot_response
 
 FILE_KEYS = ("file_key", "clean", "fs", "info", "stem")
 RESULT_KEYS = (
@@ -229,6 +229,7 @@ else:
     )
     st.audio(to_wav(filtered, fs), format="audio/wav")
     show_fig(plot_response(b, a, fs))
+    show_fig(plot_pole_zero(b, a))
     show_fig(spectrum_figure({"noisy": noisy, "filtered": filtered}, fs, fmax=200))
     show_fig(waveform_figure({"noisy": noisy, "filtered": filtered}, fs))
 
