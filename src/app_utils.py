@@ -7,6 +7,7 @@ matplotlib.use("Agg")  # before src.analysis imports pyplot: never open a GUI wi
 import numpy as np
 import soundfile as sf
 from matplotlib.figure import Figure
+from scipy.signal import spectrogram
 
 from src.analysis import detect_mains, fft_magnitude_db, plot_detection
 from src.load_audio import load_audio, protect_clipping, wav_bytes
@@ -104,4 +105,43 @@ def spectrum_figure(signals, fs, fmax=200):
     ax.grid(True, alpha=0.4)
     ax.legend(loc="upper right", title="overlapping lines = unchanged", title_fontsize="small")
     fig.tight_layout()
+    return fig
+
+
+def _spectrogram_nperseg(fs, n):
+    nperseg = 1 << int(np.ceil(np.log2(fs / 4)))  # <= ~4 Hz bins: 50/100/150 Hz stay separate
+    if n < nperseg:  # short signal: largest power of two that fits, at least 256
+        nperseg = max(256, 1 << int(np.floor(np.log2(max(n, 1)))))
+    return nperseg
+
+
+def spectrogram_figure(signals, fs, fmax=300):
+    """Side-by-side spectrograms (dB) with one shared colour scale. signals: {label: 1-D array}."""
+    fmax = min(fmax, fs / 2)
+    panels = []
+    for label, x in signals.items():
+        x = np.asarray(x, dtype=np.float64)
+        nperseg = _spectrogram_nperseg(fs, len(x))
+        noverlap = (3 * nperseg) // 4
+        f, t, sxx = spectrogram(x, fs=fs, window="hann", nperseg=nperseg, noverlap=noverlap)
+        band = f <= fmax
+        f, db = f[band], 10 * np.log10(sxx[band] + 1e-12)
+        # explicit cell edges: works even with a single time frame (short signals)
+        hop, df = (nperseg - noverlap) / fs, f[1] - f[0]
+        t_edges = np.concatenate([t - hop / 2, [t[-1] + hop / 2]])
+        f_edges = np.concatenate([f - df / 2, [f[-1] + df / 2]])
+        panels.append((label, t_edges, f_edges, db))
+
+    vmax = max(db.max() for *_, db in panels)
+    vmin = vmax - 80  # same colour scale on every panel
+
+    fig = Figure(figsize=(4.5 * len(panels) + 1, 4), layout="constrained")
+    axes = fig.subplots(1, len(panels), sharey=True, squeeze=False)[0]
+    for ax, (label, t_edges, f_edges, db) in zip(axes, panels):
+        mesh = ax.pcolormesh(t_edges, f_edges, db, shading="flat", cmap="magma", vmin=vmin, vmax=vmax)
+        ax.set_title(label)
+        ax.set_xlabel("Time (s)")
+        ax.set_ylim(0, fmax)
+    axes[0].set_ylabel("Frequency (Hz)")
+    fig.colorbar(mesh, ax=list(axes), label="Power (dB)")
     return fig

@@ -9,9 +9,11 @@ import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 
 from src.app_utils import (
+    _spectrogram_nperseg,
     detection_png,
     read_upload,
     safe_detect,
+    spectrogram_figure,
     spectrum_figure,
     to_wav,
     waveform_figure,
@@ -136,3 +138,52 @@ def test_spectrum_figure_returns_figure():
     assert len(fig.axes[0].lines) == 2
     assert fig.axes[0].get_xlim() == (0, 200)
     assert plt.get_fignums() == before
+
+
+# ---------- spectrogram_figure ----------
+
+
+def _panels(fig, labels):
+    return [ax for ax in fig.axes if ax.get_title() in labels]
+
+
+@pytest.mark.parametrize("fs, seconds", [(16000, 2.0), (8000, 2.0), (16000, 0.3), (8000, 0.3)])
+def test_spectrogram_figure_shared_scale(fs, seconds):
+    noisy = _speech_like_with_hum(fs, 50, seconds=seconds)
+    filtered = _tone(440, fs, seconds, 0.3)
+    before = plt.get_fignums()
+    fig = spectrogram_figure({"noisy": noisy, "filtered": filtered}, fs)
+    assert isinstance(fig, Figure)
+    assert plt.get_fignums() == before
+
+    panels = _panels(fig, {"noisy", "filtered"})
+    assert [ax.get_title() for ax in panels] == ["noisy", "filtered"]
+    clims = [ax.collections[0].get_clim() for ax in panels]
+    assert clims[0] == clims[1]
+    assert clims[0][1] - clims[0][0] == pytest.approx(80)
+    for ax in panels:
+        assert ax.get_ylim() == (0, 300)
+    assert any(ax.get_ylabel() == "Power (dB)" for ax in fig.axes)  # shared colorbar
+
+
+def test_spectrogram_figure_very_short_signal():
+    fs = 16000
+    fig = spectrogram_figure({"x": _tone(440, fs, 0.05)}, fs)  # 800 samples -> nperseg 512
+    assert isinstance(fig, Figure)
+    assert len(_panels(fig, {"x"})) == 1
+
+
+@pytest.mark.parametrize(
+    "fs, n, expected, full_resolution",
+    [
+        (16000, 32000, 4096, True),  # >= fs/4 -> ~3.9 Hz bins
+        (8000, 16000, 2048, True),
+        (16000, 4800, 4096, True),  # 0.3 s still fits one full segment
+        (16000, 3200, 2048, False),  # shorter than nperseg -> power of two that fits
+        (16000, 300, 256, False),  # minimum 256
+    ],
+)
+def test_spectrogram_nperseg(fs, n, expected, full_resolution):
+    assert _spectrogram_nperseg(fs, n) == expected
+    if full_resolution:
+        assert fs / expected <= 4  # frequency resolution 4 Hz or finer

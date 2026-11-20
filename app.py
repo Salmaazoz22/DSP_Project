@@ -8,6 +8,7 @@ from src.app_utils import (
     detection_png,
     read_upload,
     safe_detect,
+    spectrogram_figure,
     spectrum_figure,
     to_wav,
     waveform_figure,
@@ -231,6 +232,8 @@ else:
     show_fig(plot_response(b, a, fs))
     show_fig(plot_pole_zero(b, a))
     show_fig(spectrum_figure({"noisy": noisy, "filtered": filtered}, fs, fmax=200))
+    show_fig(spectrogram_figure({"noisy": noisy, "filtered": filtered}, fs))
+    st.caption("Hum appears as horizontal lines; after the notch the 50/60 Hz line should disappear.")
     show_fig(waveform_figure({"noisy": noisy, "filtered": filtered}, fs))
 
 # ---------------------------------------------------------------- 5 Results
