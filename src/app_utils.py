@@ -68,9 +68,11 @@ def waveform_figure(signals, fs):
     """Overlay time-domain traces. signals: {label: 1-D array}."""
     fig = Figure(figsize=(9, 3))
     ax = fig.subplots()
-    for label, x in signals.items():
+    for i, (label, x) in enumerate(signals.items()):
         x = np.asarray(x, dtype=np.float64)
-        ax.plot(np.arange(len(x)) / fs, x, label=label, linewidth=0.6, alpha=0.8)
+        # first trace wide + translucent underneath, later traces thin on top -> both visible where equal
+        style = dict(linewidth=1.2, alpha=0.45, zorder=1) if i == 0 else dict(linewidth=0.6, alpha=1.0, zorder=2 + i)
+        ax.plot(np.arange(len(x)) / fs, x, label=label, **style)
     ax.set_xlabel("Time (s)")
     ax.set_ylabel("Amplitude")
     ax.grid(True, alpha=0.4)
@@ -85,16 +87,21 @@ def spectrum_figure(signals, fs, fmax=200):
     fig = Figure(figsize=(9, 3.5))
     ax = fig.subplots()
     top, bottom = -np.inf, np.inf
-    for label, x in signals.items():
+    for i, (label, x) in enumerate(signals.items()):
         freqs, db, _ = fft_magnitude_db(np.asarray(x, dtype=np.float64), fs)
         band = freqs <= fmax
-        ax.plot(freqs[band], db[band], label=label, linewidth=0.9)
+        # first trace wide + translucent underneath, later traces thin dashed on top
+        if i == 0:
+            style = dict(linewidth=2.2, alpha=0.45, linestyle="-", zorder=1)
+        else:
+            style = dict(linewidth=0.9, alpha=1.0, linestyle="--", zorder=2 + i)
+        ax.plot(freqs[band], db[band], label=label, **style)
         top, bottom = max(top, db[band].max()), min(bottom, db[band].min())
     ax.set_xlim(0, fmax)
     ax.set_ylim(max(bottom, top - 120) - 5, top + 5)  # keep -240 dB floor of silence off-scale
     ax.set_xlabel("Frequency (Hz)")
     ax.set_ylabel("Magnitude (dB)")
     ax.grid(True, alpha=0.4)
-    ax.legend(loc="upper right")
+    ax.legend(loc="upper right", title="overlapping lines = unchanged", title_fontsize="small")
     fig.tight_layout()
     return fig
