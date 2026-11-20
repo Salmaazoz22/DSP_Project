@@ -63,7 +63,7 @@ def snr_row(clean, noisy, filtered, label):
         st.error(f"SNR ({label}) could not be computed: {e}")
         return
     if math.isfinite(before) and math.isfinite(after):
-        gain = f"{after - before:+.2f} dB"
+        gain = f"{round(after - before, 2) + 0.0:+.2f} dB"  # + 0.0 turns -0.0 into 0.0
     elif math.isinf(after) and math.isfinite(before):
         gain = "∞"
     else:
