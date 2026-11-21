@@ -9,8 +9,10 @@ import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 
 from src.app_utils import (
+    _quietest_window,
     _spectrogram_nperseg,
     detection_png,
+    hum_zoom_figure,
     read_upload,
     safe_detect,
     spectrogram_figure,
@@ -187,3 +189,57 @@ def test_spectrogram_nperseg(fs, n, expected, full_resolution):
     assert _spectrogram_nperseg(fs, n) == expected
     if full_resolution:
         assert fs / expected <= 4  # frequency resolution 4 Hz or finer
+
+
+# ---------- hum_zoom_figure ----------
+
+
+def _loud_with_quiet_gap(fs, seconds=2.0, quiet=(1.2, 1.5)):
+    """Loud noise everywhere except a near-silent segment [quiet[0], quiet[1]) s."""
+    rng = np.random.default_rng(1)
+    clean = 0.3 * rng.standard_normal(int(fs * seconds))
+    a, b = int(quiet[0] * fs), int(quiet[1] * fs)
+    clean[a:b] *= 0.001
+    return clean
+
+
+@pytest.mark.parametrize("fs", [16000, 8000])
+def test_hum_zoom_figure_two_axes_no_pyplot(fs):
+    clean = _loud_with_quiet_gap(fs)
+    noisy = clean + 0.1 * np.sin(2 * np.pi * 50 * np.arange(len(clean)) / fs)
+    before = plt.get_fignums()
+    fig = hum_zoom_figure(clean, noisy, fs, 50)
+    assert isinstance(fig, Figure)
+    assert len(fig.axes) == 2
+    assert plt.get_fignums() == before
+    ax_a, ax_b = fig.axes
+    assert len(ax_a.lines) == 2 and len(ax_b.lines) == 1
+    assert "5 cycles in 100 ms" in ax_b.get_title()
+    t, hum = ax_b.lines[0].get_data()
+    assert len(t) == round(0.1 * fs)
+    start, _ = _quietest_window(clean, fs)
+    np.testing.assert_allclose(hum, (noisy - clean)[start : start + len(t)])
+
+
+@pytest.mark.parametrize("fs", [16000, 8000])
+def test_hum_zoom_figure_short_signal_uses_all(fs):
+    clean = _tone(440, fs, 0.05, 0.3)  # 50 ms < 100 ms window
+    noisy = clean + 0.1 * np.sin(2 * np.pi * 60 * np.arange(len(clean)) / fs)
+    before = plt.get_fignums()
+    fig = hum_zoom_figure(clean, noisy, fs, 60)
+    assert isinstance(fig, Figure) and len(fig.axes) == 2
+    assert plt.get_fignums() == before
+    assert len(fig.axes[1].lines[0].get_xdata()) == len(clean)
+    assert _quietest_window(clean, fs) == (0, len(clean))
+
+
+@pytest.mark.parametrize("fs", [16000, 8000])
+def test_quietest_window_inside_known_quiet_segment(fs):
+    quiet = (1.2, 1.5)
+    clean = _loud_with_quiet_gap(fs, quiet=quiet)
+    start, length = _quietest_window(clean, fs, duration=0.1)
+    assert length == round(0.1 * fs)
+    assert quiet[0] * fs <= start and start + length <= quiet[1] * fs  # whole window inside the gap
+    assert start % round(0.01 * fs) == 0  # 10 ms search grid
+    fig = hum_zoom_figure(clean, clean + 0.01, fs, 50)
+    assert f"{start / fs:.2f} s" in fig.axes[0].get_title()  # absolute start shown in the title
