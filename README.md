@@ -6,6 +6,9 @@ listen to every stage, look at the plots, and download the filtered audio. Two s
 results: `evaluate.py` runs a batch evaluation on the dataset, and `q_experiment.py` studies the
 effect of the notch quality factor Q.
 
+**Live demo:** https://dspproject-koagkbbqpgkckxqvb423xg.streamlit.app/ (Streamlit Community Cloud, Python 3.12).
+The free tier puts the app to sleep when unused; if you see a "wake up" button, click it and wait about a minute.
+
 ## Processing pipeline
 
 1. **Load WAV**: the file is mixed to mono, the DC offset is removed, and the native sample rate is kept.
