@@ -37,11 +37,15 @@ def test_evaluate_writes_one_row_per_experiment(wav_dir, tmp_path):
     rows = _read_csv(out)
     assert len(rows) == 2 * 2 * 3  # files x f0 x snr
     assert set(evaluate.COLUMNS) <= set(rows[0].keys())
+    cols = list(rows[0].keys())
+    assert cols.index("filter_floor_db") == cols.index("improvement_db") + 1
 
     harmonics, amps = evaluate.hum_version()
     for r in rows:
         assert r["error"] == ""
         assert math.isfinite(float(r["improvement_db"]))
+        floor = float(r["filter_floor_db"])  # finite, or inf if the notch leaves the clean signal unchanged
+        assert math.isfinite(floor) or floor == math.inf
         assert int(r["f0_used"]) in (50, 60)
         assert r["hum_harmonics"] == str(harmonics) and r["hum_amps"] == str(amps)
         assert r["fs"] in ("16000", "8000")

@@ -40,6 +40,7 @@ COLUMNS = [
     "snr_before_db",
     "snr_after_db",
     "improvement_db",
+    "filter_floor_db",
     "snr_before_skip_db",
     "snr_after_skip_db",
     "improvement_skip_db",
@@ -101,6 +102,7 @@ def evaluate_file(path, f0_list, snr_list, q, harmonics, amps):
         clean, fs, load_error = None, None, f"load: {type(e).__name__}: {e}"
 
     rows = []
+    floors = {}  # (f0_used, q) -> snr_db(clean, notch(clean)); computed once per file
     for f0 in f0_list:
         for snr in snr_list:
             row = {**base, "f0_true": f0, "target_snr_db": snr, "error": load_error}
@@ -117,9 +119,13 @@ def evaluate_file(path, f0_list, snr_list, q, harmonics, amps):
                 f0_used = selected if selected is not None else f0
                 row["f0_used"] = f0_used
 
-                filtered = apply_notch(noisy, *design_notch(f0_used, fs, q))
+                b, a = design_notch(f0_used, fs, q)
+                filtered = apply_notch(noisy, b, a)
                 before, after = _snr_pair(clean, noisy, filtered)
                 row.update(snr_before_db=_num(before), snr_after_db=_num(after), improvement_db=_num(_gain(before, after)))
+                if (f0_used, q) not in floors:  # best achievable SNR: notch on the clean speech alone
+                    floors[(f0_used, q)] = _num(snr_db(clean, apply_notch(clean, b, a)))
+                row["filter_floor_db"] = floors[(f0_used, q)]
                 if len(clean) > fs:  # extra measurement only for signals longer than 1 s
                     k = int(SKIP_S * fs)
                     b_s, a_s = _snr_pair(clean[k:], noisy[k:], filtered[k:])
@@ -159,6 +165,17 @@ def summarize(rows, harmonics, amps):
                 vals = [r[key] for r in sub if r.get(key) is not None and math.isfinite(r[key])]
                 cells.append(f"{np.mean(vals):7.2f} / {min(vals):7.2f} / {max(vals):7.2f}  (n={len(vals)})" if vals else "    n/a")
             lines.append(f"  f0={f0} Hz, SNR={snr:>3} dB:   {cells[0]}    {cells[1]}")
+
+    lines.append("\nLowest filter_floor_db (SNR of clean vs notch(clean)), 3 files per f0:")
+    for f0 in sorted({r["f0_true"] for r in rows}):
+        per_file = {}
+        for r in rows:
+            v = r.get("filter_floor_db")
+            if r["f0_true"] == f0 and v is not None:
+                per_file[r["file"]] = min(v, per_file.get(r["file"], v))
+        worst = sorted(per_file.items(), key=lambda kv: kv[1])[:3]
+        lines.append(f"  {f0} Hz: " + (", ".join(f"{name} {v:.2f} dB" for name, v in worst) if worst else "n/a"))
+    lines.append("  Low improvement at high input SNR is expected when snr_before approaches filter_floor_db.")
     return "\n".join(lines)
 
 
