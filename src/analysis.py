@@ -5,7 +5,7 @@ from scipy.signal import find_peaks
 
 
 def make_hum(
-    n_samples, sr, f0=50, harmonics=(1, 2, 3, 4), amps=(1.0, 0.5, 0.3, 0.2)
+    n_samples, sr, f0=50, harmonics=(1,), amps=(1.0,)
 ):
     t = np.arange(n_samples) / sr
     hum = np.zeros(n_samples, dtype="float32")
