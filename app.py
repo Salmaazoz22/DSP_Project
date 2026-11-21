@@ -6,6 +6,7 @@ import streamlit as st
 # app_utils must be imported before anything that imports pyplot: it selects the Agg backend
 from src.app_utils import (
     detection_png,
+    hum_zoom_figure,
     read_upload,
     safe_detect,
     spectrogram_figure,
@@ -16,6 +17,7 @@ from src.app_utils import (
 import matplotlib.pyplot as plt
 
 from src.analysis import add_hum
+from src.load_audio import peak_normalize
 from src.metrics import snr_db
 from src.notch_filter import apply_notch, design_notch, plot_pole_zero, plot_response
 
@@ -188,6 +190,10 @@ else:
     st.audio(to_wav(noisy, fs), format="audio/wav")
     show_fig(waveform_figure({"clean": clean, "noisy": noisy}, fs))
     show_fig(spectrum_figure({"clean": clean, "noisy": noisy}, fs, fmax=200))
+    st.write("Hum only (noisy − clean), normalised for listening")
+    st.audio(to_wav(peak_normalize(noisy - clean, peak=0.5), fs), format="audio/wav")
+    st.caption("50/60 Hz is a low tone: use headphones; laptop speakers may not reproduce it.")
+    show_fig(hum_zoom_figure(clean, noisy, fs, hum_f0))
 
 # ---------------------------------------------------------------- 3 Detection
 

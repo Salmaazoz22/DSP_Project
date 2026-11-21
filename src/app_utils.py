@@ -82,6 +82,53 @@ def waveform_figure(signals, fs):
     return fig
 
 
+def _quietest_window(clean, fs, duration=0.1, step_s=0.01):
+    """(start, length) in samples of the `duration` window where `clean` has the lowest RMS.
+
+    Starts are searched every `step_s` seconds; a signal shorter than `duration` uses all of it.
+    """
+    clean = np.asarray(clean, dtype=np.float64)
+    n = len(clean)
+    win = max(1, int(round(duration * fs)))
+    if n <= win:
+        return 0, n
+    step = max(1, int(round(step_s * fs)))
+    starts = np.arange(0, n - win + 1, step)
+    csum = np.concatenate([[0.0], np.cumsum(clean**2)])
+    energy = csum[starts + win] - csum[starts]  # same length for every window -> lowest energy = lowest RMS
+    return int(starts[np.argmin(energy)]), win
+
+
+def hum_zoom_figure(clean, noisy, fs, f0, duration=0.1):
+    """Zoom on the quietest `duration` s of the clean signal: (a) clean vs noisy, (b) hum only (noisy - clean)."""
+    clean = np.asarray(clean, dtype=np.float64)
+    noisy = np.asarray(noisy, dtype=np.float64)
+    start, length = _quietest_window(clean, fs, duration)
+    seg = slice(start, start + length)
+    t_ms = np.arange(length) / fs * 1000
+    win_ms = length / fs * 1000
+    cycles = round(f0 * length / fs, 2)  # = f0 * duration when the signal is long enough
+
+    fig = Figure(figsize=(9, 5))
+    ax_a, ax_b = fig.subplots(2, 1, sharex=True)
+    # same styling idea as waveform_figure: first trace wide + translucent underneath
+    ax_a.plot(t_ms, clean[seg], label="clean", linewidth=1.2, alpha=0.45, zorder=1)
+    ax_a.plot(t_ms, noisy[seg], label="noisy", linewidth=0.6, alpha=1.0, zorder=2)
+    ax_a.set_title(f"(a) Quietest {win_ms:g} ms of the clean signal (window starts at {start / fs:.2f} s)")
+    ax_a.set_ylabel("Amplitude")
+    ax_a.grid(True, alpha=0.4)
+    ax_a.legend(loc="upper right")
+
+    ax_b.plot(t_ms, noisy[seg] - clean[seg], color="tab:red", linewidth=1.0, label="noisy − clean")
+    ax_b.set_title(f"(b) Hum only: {f0:g} Hz -> {cycles:g} cycles in {win_ms:g} ms")
+    ax_b.set_xlabel("Time from window start (ms)")
+    ax_b.set_ylabel("Amplitude")
+    ax_b.grid(True, alpha=0.4)
+    ax_b.legend(loc="upper right")
+    fig.tight_layout()
+    return fig
+
+
 def spectrum_figure(signals, fs, fmax=200):
     """Overlay magnitude spectra (dB) from fft_magnitude_db, 0..fmax Hz."""
     fmax = min(fmax, fs / 2)
